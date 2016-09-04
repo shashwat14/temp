@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
 Created on Fri Sep  2 12:16:06 2016
-
 @author: therumsticks
 """
 
 import numpy as np
 import cv2
+import math
 
 class Camera(object):
     
@@ -17,7 +17,7 @@ class Camera(object):
         self.cap = cv2.VideoCapture(0)
         self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)
         self.tracks = []
-        self.track_len = 10
+        self.track_len = 3
         self.detect_interval = 1
         self.frame_idx = 0
     
@@ -52,7 +52,7 @@ class Camera(object):
                 features.append((ptx,pty))
             return np.array(features)
         elif detector_type == "good":
-            feature_params = dict( maxCorners = 100, qualityLevel = 0.3, minDistance = 7, blockSize = 7 )            
+            feature_params = dict( maxCorners = 1000, qualityLevel = 0.3, minDistance = 7, blockSize = 7 )            
             p0 = cv2.goodFeaturesToTrack(old_gray, mask = None, **feature_params)
             return p0
             
@@ -104,7 +104,7 @@ class Camera(object):
         focal = np.mean(self.newcameramtx[0][0] + self.newcameramtx[1][1])
         pp = (self.newcameramtx[0][2],self.newcameramtx[1][2])
         for tr in self.tracks:
-            if len(tr) == 1:
+            if len(tr) == 3:
                 firstP.append(tr[0])
                 secondP.append(tr[-1])
         if len(firstP) > 5:
@@ -118,34 +118,49 @@ class Camera(object):
         
 h, w = (480, 640)
 
-camera = Camera("camparam2.npz", 640, 480)
+camera = Camera("camparam.npz", 640, 480)
 
 ret, img = camera.fetch()
 old_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 x = 0
 y = 0
-
+alpha = 0
+beta = 0
+gamma = 0
 while 1:
     ret, img = camera.fetch()
+    
     if ret:
+        back = img
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         camera.trackFeatures(old_gray, gray)
         R,t = camera.getPose()
+        if R != None:
+            r11 = R[0][0]
+            r12 = R[0][1]
+            r13 = R[0][2]
+            r21 = R[1][0]
+            r22 = R[1][1]
+            r23 = R[1][2]
+            r31 = R[2][0]
+            r32 = R[2][1]
+            r33 = R[2][2]
+            
+            yaw = math.degrees(math.atan(r21/r11))
+            pitch = math.degrees(math.atan(r31/(r32**2.0 + r33**2.0)**0.5))
+            roll = math.degrees(math.atan(r32/r33))
+            alpha += yaw
+            beta += pitch
+            gamma += roll
+            print alpha, beta, gamma
+            
+            #print "X = ", t[0], " Y = ", t[1], " Z = ", t[2]
+            
         cv2.polylines(img, [np.int32(tr) for tr in camera.tracks], False, (0,255,0))
         cv2.imshow("Frame", img)
         ch = cv2.waitKey(1)
         if ch == ord('q'):
             break
+        old_gray = gray
 camera.cap.release()
 cv2.destroyAllWindows()
-
-
-
-
-
-
-
-
-
-
-
